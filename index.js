@@ -2,6 +2,7 @@
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const cors = require("cors");
 require("dotenv").config();
 
@@ -42,7 +43,7 @@ async function run() {
       if (email) {
         const result = await userCollection.findOne({ email });
         if (result) {
-          res.send({ message: "user already exist" });
+          res.send({ isExist: true, message: "user already exist" });
           return;
         }
       }
@@ -58,7 +59,10 @@ async function run() {
       };
 
       const result = await userCollection.insertOne(newUser);
-      res.send(result);
+      const token = jwt.sign({ email, phone }, process.env.JWT_SECRET, {
+        expiresIn: "2h",
+      });
+      res.send({ result, token });
     });
 
     app.post("/checkUser", async (req, res) => {
@@ -66,10 +70,23 @@ async function run() {
 
       if (email) {
         const user = await userCollection.findOne({ email });
+
+        if (!user) {
+          res.send({ notFound: true, message: "user not available" });
+          return
+        }
+
         if (user) {
           const isValid = bcrypt.compareSync(pin, user.pin);
           if (isValid) {
-            res.send(user);
+            const token = jwt.sign(
+              { email: user.email, phone: user.phone },
+              process.env.JWT_SECRET,
+              {
+                expiresIn: "2h",
+              }
+            );
+            res.send({ ...user, token });
           } else {
             res.send({ message: "pin number is incorrect" });
           }
